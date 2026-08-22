@@ -33,7 +33,7 @@
     "exifr": "^7.1.3",
     "express": "latest",
     "lucide-react": "latest",
-    "marked": "^16.4.2",
+    "marked": "^18.0.10",
     "multer": "latest",
     "react": "latest",
     "react-dom": "latest",
