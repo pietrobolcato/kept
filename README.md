@@ -2,9 +2,9 @@
 
 Kept is a self-hostable visual memory for the things you do not want to lose. Save links, images, videos, and notes; let AI describe and file them; then recover them through semantic, visual, colour, and date-aware search.
 
-[![Kept — everything worth keeping, one place to find it](docs/media/kept-hero.png)](docs/media/kept-github-film.mp4)
+[![Kept — everything worth keeping, one place to find it](docs/media/kept-hero.png)](https://raw.githubusercontent.com/pietrobolcato/kept/main/docs/media/kept-github-film.mp4)
 
-[Watch Kept in 22 seconds →](docs/media/kept-github-film.mp4)
+[▶ Watch Kept in 22 seconds](https://raw.githubusercontent.com/pietrobolcato/kept/main/docs/media/kept-github-film.mp4)
 
 It includes:
 
