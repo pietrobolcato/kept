@@ -2,6 +2,10 @@
 
 Kept is a self-hostable visual memory for the things you do not want to lose. Save links, images, videos, and notes; let AI describe and file them; then recover them through semantic, visual, colour, and date-aware search.
 
+[![Kept — everything worth keeping, one place to find it](docs/media/kept-hero.png)](docs/media/kept-promo.mp4)
+
+**[Watch the 14-second product film](docs/media/kept-promo.mp4)** · [Campaign assets and reusable source](marketing/README.md)
+
 It includes:
 
 - A responsive, installable React web app.

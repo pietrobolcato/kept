@@ -15,6 +15,7 @@
     "backfill:dedupe": "tsx scripts/backfill-dedupe.ts",
     "backfill:photo-dates": "node scripts/backfill-photo-dates.mjs",
     "telegram:webhook": "node scripts/configure-telegram.mjs",
+    "marketing:render": "node marketing/render-assets.mjs",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "check:release": "node scripts/check-release.mjs",
     "test:import-links": "node --test scripts/import-apple-links.test.mjs",
