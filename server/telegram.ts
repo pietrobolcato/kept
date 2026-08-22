@@ -15,7 +15,9 @@ type TelegramMessage = {
   document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number }
   video?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number; thumbnail?: { file_id: string; file_size?: number }; thumb?: { file_id: string; file_size?: number } }
 }
-type TelegramUpdate = { update_id?: number; message?: TelegramMessage }
+type TelegramCallbackQuery = { id: string; from: TelegramUser; message?: TelegramMessage; data?: string }
+type TelegramUpdate = { update_id?: number; message?: TelegramMessage; callback_query?: TelegramCallbackQuery }
+type TelegramDestination = { ownerUserId: string; label: string; personal: boolean }
 
 class TelegramStatusReportedError extends Error {}
 
@@ -45,13 +47,15 @@ function firstUrl(value: string) {
   return match?.[0].replace(/[),.;!?\]}]+$/, '')
 }
 
-async function sendMessage(chatId: number, text: string) {
+type InlineKeyboard = { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
+
+async function sendMessage(chatId: number, text: string, replyMarkup?: InlineKeyboard) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token) return undefined
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, reply_markup: replyMarkup }),
   })
   if (!response.ok) {
     console.warn('Telegram reply failed:', response.status)
@@ -61,16 +65,57 @@ async function sendMessage(chatId: number, text: string) {
   return result.ok && Number.isSafeInteger(result.result?.message_id) ? result.result!.message_id : undefined
 }
 
-async function editMessage(chatId: number, messageId: number | undefined, text: string) {
+async function editMessage(chatId: number, messageId: number | undefined, text: string, replyMarkup?: InlineKeyboard) {
   const token = process.env.TELEGRAM_BOT_TOKEN
   if (!token || !messageId) return false
   const response = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, text, disable_web_page_preview: true, reply_markup: replyMarkup }),
   })
   if (!response.ok) console.warn('Telegram status edit failed:', response.status)
   return response.ok
+}
+
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return
+  await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+  }).catch(() => undefined)
+}
+
+function readableOwnerLabel(value?: string | null) {
+  if (!value) return 'Shared library'
+  const raw = value.includes('@') ? value.split('@')[0] : value
+  const words = raw.replace(/[._-]+/g, ' ').trim()
+  return words ? words.replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Shared library'
+}
+
+async function telegramDestinations(client: SupabaseClient, userId: string, resolveOwnerLabels = false): Promise<TelegramDestination[]> {
+  const { data, error } = await client.from('library_members')
+    .select('owner_user_id')
+    .eq('member_user_id', userId)
+    .eq('can_add', true)
+  if (error) throw new Error(`Telegram destinations could not be loaded: ${error.message}`)
+  const ownerIds = [...new Set((data ?? []).map((row) => row.owner_user_id as string))]
+  const shared = await Promise.all(ownerIds.map(async (ownerUserId) => {
+    const { data: owner } = resolveOwnerLabels ? await client.auth.admin.getUserById(ownerUserId) : { data: { user: null } }
+    const label = readableOwnerLabel(owner.user?.email ?? owner.user?.user_metadata?.full_name ?? owner.user?.user_metadata?.name)
+    return { ownerUserId, label: `${label}’s library`, personal: false }
+  }))
+  return [{ ownerUserId: userId, label: 'My library', personal: true }, ...shared]
+}
+
+function destinationKeyboard(destinations: TelegramDestination[], currentOwnerId: string): InlineKeyboard {
+  return {
+    inline_keyboard: destinations.map((destination) => [{
+      text: `${destination.ownerUserId === currentOwnerId ? '✓ ' : ''}${destination.label}`,
+      callback_data: `destination:${destination.personal ? 'self' : destination.ownerUserId}`,
+    }]),
+  }
 }
 
 function messageImage(message: TelegramMessage) {
@@ -149,16 +194,57 @@ async function connectPairing(client: SupabaseClient, message: TelegramMessage, 
   return true
 }
 
+async function handleDestinationCallback(client: SupabaseClient, callback: TelegramCallbackQuery) {
+  const message = callback.message
+  if (!message || !callback.data?.startsWith('destination:')) {
+    await answerCallbackQuery(callback.id)
+    return
+  }
+  const { data: connection, error } = await client.from('telegram_connections')
+    .select('user_id,default_owner_user_id')
+    .eq('telegram_user_id', callback.from.id)
+    .maybeSingle()
+  if (error) throw new Error(`Telegram connection lookup failed: ${error.message}`)
+  if (!connection) {
+    await answerCallbackQuery(callback.id, 'Connect this Telegram account to Kept first.')
+    return
+  }
+  const destinations = await telegramDestinations(client, connection.user_id, true)
+  const requested = callback.data.slice('destination:'.length)
+  if (requested === 'menu') {
+    const currentOwnerId = connection.default_owner_user_id ?? connection.user_id
+    await editMessage(message.chat.id, message.message_id, 'Where should new Telegram saves go?', destinationKeyboard(destinations, currentOwnerId))
+    await answerCallbackQuery(callback.id)
+    return
+  }
+  const ownerUserId = requested === 'self' ? connection.user_id : requested
+  const destination = destinations.find((entry) => entry.ownerUserId === ownerUserId)
+  if (!destination) {
+    await answerCallbackQuery(callback.id, 'That shared library is no longer available.')
+    return
+  }
+  const { error: updateError } = await client.from('telegram_connections')
+    .update({ default_owner_user_id: destination.personal ? null : destination.ownerUserId })
+    .eq('user_id', connection.user_id)
+  if (updateError) throw new Error(`Telegram destination could not be updated: ${updateError.message}`)
+  await editMessage(message.chat.id, message.message_id, `Default destination: ${destination.label} ✓\n\nEverything you share here will go there until you change it.`, destinationKeyboard(destinations, destination.ownerUserId))
+  await answerCallbackQuery(callback.id, `Using ${destination.label}`)
+}
+
 async function processUpdate(update: TelegramUpdate) {
+  const client = createServiceClient()
+  if (update.callback_query) {
+    await handleDestinationCallback(client, update.callback_query)
+    return
+  }
   const message = update.message
   if (!message || message.chat.type !== 'private') return
-  const client = createServiceClient()
   const content = (message.text ?? message.caption ?? '').trim()
   const startCode = content.match(/^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{8,64})$/)?.[1]
   if (startCode) {
     const connected = await connectPairing(client, message, startCode)
     await sendMessage(message.chat.id, connected
-      ? 'Connected to Kept ✓\n\nSend me any link, photo, video or note and I’ll organise it into your library.'
+      ? 'Connected to Kept ✓\n\nSend me any link, photo, video or note and I’ll organise it into your library. Use /destination whenever you want to save into a shared library instead.'
       : 'That pairing link has expired or was already used. Create a fresh one in Kept.')
     return
   }
@@ -167,10 +253,20 @@ async function processUpdate(update: TelegramUpdate) {
     return
   }
 
-  const { data: connection, error } = await client.from('telegram_connections').select('user_id').eq('chat_id', message.chat.id).maybeSingle()
+  const { data: connection, error } = await client.from('telegram_connections').select('user_id,default_owner_user_id').eq('chat_id', message.chat.id).maybeSingle()
   if (error) throw new Error(`Telegram connection lookup failed: ${error.message}`)
   if (!connection) {
     await sendMessage(message.chat.id, 'This chat is not connected yet. Open Kept → Add from phone → Connect Telegram.')
+    return
+  }
+  const destinations = await telegramDestinations(client, connection.user_id, true)
+  let destination = destinations.find((entry) => entry.ownerUserId === (connection.default_owner_user_id ?? connection.user_id))
+  if (!destination) {
+    destination = destinations[0]
+    await client.from('telegram_connections').update({ default_owner_user_id: null }).eq('user_id', connection.user_id)
+  }
+  if (/^\/destination(?:@\w+)?\s*$/i.test(content)) {
+    await sendMessage(message.chat.id, `Current destination: ${destination.label}\n\nChoose where new Telegram saves should go:`, destinationKeyboard(destinations, destination.ownerUserId))
     return
   }
   const image = messageImage(message)
@@ -196,6 +292,7 @@ async function processUpdate(update: TelegramUpdate) {
         videoMimeType: ['video/mp4', 'video/quicktime', 'video/webm'].includes(video.mimeType) ? video.mimeType : 'video/mp4',
         filename: video.filename,
         hint: content,
+        ownerUserId: destination.ownerUserId,
       })
       : image
       ? await captureImageItem({
@@ -205,6 +302,7 @@ async function processUpdate(update: TelegramUpdate) {
         mimeType: image.mimeType,
         filename: image.filename,
         hint: content,
+        ownerUserId: destination.ownerUserId,
       })
       : await captureTextItem({
         client,
@@ -212,14 +310,15 @@ async function processUpdate(update: TelegramUpdate) {
         type: url ? 'link' : 'note',
         value: url ?? content,
         context: url ? content.replace(url, '').trim() : undefined,
+        ownerUserId: destination.ownerUserId,
       })
     await client.from('telegram_connections').update({ last_used_at: new Date().toISOString() }).eq('user_id', connection.user_id)
     const place = item.location?.name ? ` · ${item.location.name}` : ''
     await editMessage(message.chat.id, statusId, 'Understood ✓')
     const finalText = item.duplicate
-      ? `Already kept ✓\n${item.title}\nIn ${item.space}${place}`
-      : `Saved ✓\n${item.title}\nFiled in ${item.space}${place}`
-    await sendMessage(message.chat.id, finalText)
+      ? `Already kept ✓\n${item.title}\n${destination.label} · ${item.space}${place}`
+      : `Saved ✓\n${item.title}\n${destination.label} · ${item.space}${place}`
+    await sendMessage(message.chat.id, finalText, { inline_keyboard: [[{ text: 'Change destination', callback_data: 'destination:menu' }]] })
   } catch (error) {
     const failure = 'Couldn’t save this one. Please try sending it again.'
     if (!await editMessage(message.chat.id, statusId, failure)) await sendMessage(message.chat.id, failure)
@@ -255,10 +354,30 @@ export function createTelegramPublicRouter() {
 export function createTelegramPrivateRouter() {
   const router = express.Router()
   router.get('/integrations/telegram', async (_request, response) => {
-    const { client } = auth(response)
-    const { data, error } = await client.from('telegram_connections').select('username,first_name,created_at,last_used_at').maybeSingle()
+    const { client, user } = auth(response)
+    const { data, error } = await client.from('telegram_connections').select('username,first_name,created_at,last_used_at,default_owner_user_id').maybeSingle()
     if (error) return response.status(503).json({ error: `Could not load Telegram connection: ${error.message}` })
-    response.json({ enabled: configured(), botUsername: process.env.TELEGRAM_BOT_USERNAME ?? null, connected: Boolean(data), connection: data ?? null })
+    const destinationClient = process.env.SUPABASE_SERVICE_ROLE_KEY ? createServiceClient() : client
+    const destinations = data ? await telegramDestinations(destinationClient, user.id, Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)) : []
+    const selectedOwnerId = data?.default_owner_user_id ?? user.id
+    const destination = destinations.find((entry) => entry.ownerUserId === selectedOwnerId) ?? destinations[0] ?? null
+    response.json({ enabled: configured(), botUsername: process.env.TELEGRAM_BOT_USERNAME ?? null, connected: Boolean(data), connection: data ?? null, destinations, destination })
+  })
+  router.patch('/integrations/telegram', async (request, response) => {
+    const { client, user } = auth(response)
+    const requestedOwnerId = typeof request.body?.ownerUserId === 'string' ? request.body.ownerUserId : user.id
+    const destinationClient = process.env.SUPABASE_SERVICE_ROLE_KEY ? createServiceClient() : client
+    const destinations = await telegramDestinations(destinationClient, user.id, Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY))
+    const destination = destinations.find((entry) => entry.ownerUserId === requestedOwnerId)
+    if (!destination) return response.status(403).json({ error: 'That shared library is not available for Telegram capture.' })
+    const { data, error } = await client.from('telegram_connections')
+      .update({ default_owner_user_id: destination.personal ? null : destination.ownerUserId })
+      .eq('user_id', user.id)
+      .select('username,first_name,created_at,last_used_at,default_owner_user_id')
+      .maybeSingle()
+    if (error) return response.status(503).json({ error: `Could not update Telegram destination: ${error.message}` })
+    if (!data) return response.status(404).json({ error: 'Connect Telegram before choosing a destination.' })
+    response.json({ connection: data, destination, destinations })
   })
   router.post('/integrations/telegram/pairing', async (_request, response) => {
     if (!configured()) return response.status(503).json({ error: 'The Telegram bot is not configured yet.' })

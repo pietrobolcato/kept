@@ -26,10 +26,15 @@ const telegram = async (method, body) => {
 }
 
 const bot = await telegram('getMe', {})
+await telegram('setMyCommands', {
+  commands: [
+    { command: 'destination', description: 'Choose where new saves go' },
+  ],
+})
 await telegram('setWebhook', {
   url: `${appUrl}/api/telegram/webhook`,
   secret_token: secret,
-  allowed_updates: ['message'],
+  allowed_updates: ['message', 'callback_query'],
   drop_pending_updates: false,
 })
 

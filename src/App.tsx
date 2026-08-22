@@ -311,9 +311,10 @@ function Sidebar({
       ownerLabel: ownerSpaces.find((space) => space.ownerLabel)?.ownerLabel,
       spaces: ownerSpaces,
       wholeLibrary: ownerSpaces.some((space) => space.library),
-      permissions: ownerSpaces[0].permissions,
+      permissions: ownerSpaces.find((space) => space.library)?.permissions ?? ownerSpaces[0].permissions,
     }))
   }, [sharedSpaces])
+  const personalItems = items.filter((item) => item.ownerId === currentUserId)
   const capture = () => {
     onMobileClose()
     onCapture()
@@ -363,14 +364,14 @@ function Sidebar({
 
         <nav aria-label="Library navigation">
           <p className="nav-label">Library</p>
-          <button className={`nav-row ${view === 'all' ? 'active' : ''}`} onClick={() => nav('all')}>
-            <span><Grid2X2 size={16} /> All items</span><em>{items.length}</em>
+          <button className={`nav-row ${view === 'all' && activeSpaceOwnerId === currentUserId ? 'active' : ''}`} onClick={() => nav('all')}>
+            <span><Grid2X2 size={16} /> All items</span><em>{personalItems.length}</em>
           </button>
-          <button className={`nav-row ${view === 'recent' ? 'active' : ''}`} onClick={() => nav('recent')}>
+          <button className={`nav-row ${view === 'recent' && activeSpaceOwnerId === currentUserId ? 'active' : ''}`} onClick={() => nav('recent')}>
             <span><Clock3 size={16} /> Recent</span>
           </button>
-          <button className={`nav-row ${view === 'favourites' ? 'active' : ''}`} onClick={() => nav('favourites')}>
-            <span><Star size={16} /> Favourites</span><em>{items.filter((item) => item.favourite).length}</em>
+          <button className={`nav-row ${view === 'favourites' && activeSpaceOwnerId === currentUserId ? 'active' : ''}`} onClick={() => nav('favourites')}>
+            <span><Star size={16} /> Favourites</span><em>{personalItems.filter((item) => item.favourite).length}</em>
           </button>
 
           <div className="spaces-header">
@@ -392,7 +393,7 @@ function Sidebar({
             {sharedGroups.map((group) => {
               const expanded = expandedSharedOwners.has(group.ownerUserId)
               const ownerName = friendlyOwnerName(group.ownerLabel)
-              const active = activeSpaceOwnerId === group.ownerUserId && view === 'space'
+              const active = activeSpaceOwnerId === group.ownerUserId
               return <section className={`shared-owner-group ${active ? 'active' : ''}`} key={group.ownerUserId}>
                 <button className="shared-owner-header" onClick={() => setExpandedSharedOwners((current) => { const next = new Set(current); if (next.has(group.ownerUserId)) next.delete(group.ownerUserId); else next.add(group.ownerUserId); return next })} aria-expanded={expanded}>
                   <span className="shared-owner-avatar">{ownerName.slice(0, 2).toUpperCase()}</span>
@@ -400,6 +401,9 @@ function Sidebar({
                   <ChevronDown size={13} />
                 </button>
                 {expanded && <div className="shared-owner-spaces">
+                  {group.wholeLibrary && <button className={`nav-row shared-library-all ${view === 'all' && activeSpaceOwnerId === group.ownerUserId ? 'active' : ''}`} onClick={() => nav('all', undefined, group.ownerUserId)}>
+                    <span><Grid2X2 size={13} /> All shared items</span><em>{items.filter((item) => item.ownerId === group.ownerUserId).length}</em>
+                  </button>}
                   {group.spaces.map((shared) => {
                     const space = spaces.find((entry) => entry.ownerId === shared.ownerUserId && entry.name === shared.name)
                     return <button key={`${shared.ownerUserId}:${shared.name}`} className={`nav-row space-row shared-space-row ${view === 'space' && activeSpace === shared.name && activeSpaceOwnerId === shared.ownerUserId ? 'active' : ''}`} onClick={() => nav('space', shared.name, shared.ownerUserId)}>
@@ -652,7 +656,9 @@ async function posterFromVideo(file: File) {
   }
 }
 
-function CaptureModal({ open, currentUserId, targetSpace, initialValue = '', initialTab = 'link', onClose, onCaptured }: { open: boolean; currentUserId: string; targetSpace?: { ownerId: string; name: string }; initialValue?: string; initialTab?: CaptureTab; onClose: () => void; onCaptured: (item: MemoryItem) => void }) {
+type CaptureTarget = { ownerId: string; name?: string; label: string }
+
+function CaptureModal({ open, currentUserId, targetSpace, initialValue = '', initialTab = 'link', onClose, onCaptured }: { open: boolean; currentUserId: string; targetSpace?: CaptureTarget; initialValue?: string; initialTab?: CaptureTab; onClose: () => void; onCaptured: (item: MemoryItem) => void }) {
   const [tab, setTab] = useState<CaptureTab>(initialTab)
   const [value, setValue] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -715,12 +721,14 @@ function CaptureModal({ open, currentUserId, targetSpace, initialValue = '', ini
           body.append('contentFingerprint', fingerprint)
           body.append('filename', file!.name)
           body.append('hint', value)
-          if (targetSpace) { body.append('ownerUserId', targetSpace.ownerId); body.append('spaceName', targetSpace.name) }
+          if (targetSpace) body.append('ownerUserId', targetSpace.ownerId)
+          if (targetSpace?.name) body.append('spaceName', targetSpace.name)
           response = await apiFetch('/api/upload-video', { method: 'POST', body })
           if (!response.ok) await supabase.storage.from('kept-images').remove([videoStoragePath])
         } else {
           const body = new FormData(); body.append('image', file!); body.append('hint', value)
-          if (targetSpace) { body.append('ownerUserId', targetSpace.ownerId); body.append('spaceName', targetSpace.name) }
+          if (targetSpace) body.append('ownerUserId', targetSpace.ownerId)
+          if (targetSpace?.name) body.append('spaceName', targetSpace.name)
           response = await apiFetch('/api/upload', { method: 'POST', body })
         }
       } else {
@@ -762,7 +770,7 @@ function CaptureModal({ open, currentUserId, targetSpace, initialValue = '', ini
             </div>
 
             <div className="capture-body">
-              {targetSpace && <div className="capture-target"><Share2 size={14} /><span>Adding to shared space</span><strong>{targetSpace.name}</strong></div>}
+              {targetSpace && <div className="capture-target"><Share2 size={14} /><span>Adding for everyone in</span><strong>{targetSpace.label}</strong></div>}
               {tab === 'link' && (
                 <label className="field-label">Link
                   <div className="url-field"><Link2 size={17} /><input ref={inputRef} type="url" value={value} onChange={(event) => setValue(event.target.value)} placeholder="Paste any URL…" onKeyDown={(event) => { if (event.key === 'Enter') void submit() }} /></div>
@@ -1295,9 +1303,9 @@ function LibraryApp({ session }: { session: Session }) {
   }, [session.user.id])
 
   const shownItems = useMemo(() => {
-    let result = [...new Map(items.map((item) => [item.id, item])).values()]
+    let result = [...new Map(items.map((item) => [item.id, item])).values()].filter((item) => item.ownerId === activeSpaceOwnerId)
     if (view === 'favourites') result = result.filter((item) => item.favourite)
-    if (view === 'space') result = result.filter((item) => item.space === activeSpace && item.ownerId === activeSpaceOwnerId)
+    if (view === 'space') result = result.filter((item) => item.space === activeSpace)
     if (kind !== 'all') result = result.filter((item) => item.kind === kind)
     if (query.trim() || selectedColour || explicitDateRange) {
       if (resolvedQuery !== searchSignature) return []
@@ -1352,7 +1360,7 @@ function LibraryApp({ session }: { session: Session }) {
 
   const relevanceById = useMemo(() => new Map(searchMatches.map((match) => [match.id, match.relevance])), [searchMatches])
   const hasSearch = Boolean(query.trim() || selectedColour || explicitDateRange)
-  const hasSearchScope = hasSearch && (view === 'favourites' || view === 'space' || kind !== 'all' || explicitDateRange || detectedDate)
+  const hasSearchScope = hasSearch && (activeSpaceOwnerId !== session.user.id || view === 'favourites' || view === 'space' || kind !== 'all' || explicitDateRange || detectedDate)
   const searchPending = hasSearch && (searching || resolvedQuery !== searchSignature)
 
   const clearViewScope = () => {
@@ -1377,9 +1385,15 @@ function LibraryApp({ session }: { session: Session }) {
     : undefined
   const canEditItem = (item: MemoryItem) => item.ownerId === session.user.id || Boolean(sharedAccess(item)?.canEdit)
   const canDeleteItem = (item: MemoryItem) => item.ownerId === session.user.id || Boolean(sharedAccess(item)?.canDelete)
+  const activeSharedLibrary = sharedSpaces.find((space) => space.ownerUserId === activeSpaceOwnerId && space.library)
+  const activeSharedOwnerName = activeSpaceOwnerId === session.user.id ? '' : friendlyOwnerName(sharedSpaces.find((space) => space.ownerUserId === activeSpaceOwnerId)?.ownerLabel)
   const activeSharedSpace = sharedSpaces.find((space) => space.ownerUserId === activeSpaceOwnerId && space.name === activeSpace)
-  const captureTarget = view === 'space' && activeSharedSpace?.permissions.canAdd ? { ownerId: activeSharedSpace.ownerUserId, name: activeSharedSpace.name } : undefined
-  const pageTitle = query ? `Results for “${query}”` : selectedColour ? 'Closest colour matches' : explicitDateRange ? explicitDateRange.label : view === 'space' ? activeSpace : view === 'favourites' ? 'Favourites' : view === 'recent' ? 'Recently kept' : 'Everything worth finding again.'
+  const captureTarget: CaptureTarget | undefined = view === 'space' && activeSharedSpace?.permissions.canAdd
+    ? { ownerId: activeSharedSpace.ownerUserId, name: activeSharedSpace.name, label: activeSharedSpace.name }
+    : view === 'all' && activeSharedLibrary?.permissions.canAdd
+      ? { ownerId: activeSharedLibrary.ownerUserId, label: `${activeSharedOwnerName}’s library` }
+      : undefined
+  const pageTitle = query ? `Results for “${query}”` : selectedColour ? 'Closest colour matches' : explicitDateRange ? explicitDateRange.label : view === 'space' ? activeSpace : view === 'favourites' ? 'Favourites' : view === 'recent' ? 'Recently kept' : activeSpaceOwnerId !== session.user.id ? `${activeSharedOwnerName}’s shared library` : 'Everything worth finding again.'
 
   const toggleFavourite = async (id: string) => {
     const current = items.find((item) => item.id === id)
@@ -1435,8 +1449,8 @@ function LibraryApp({ session }: { session: Session }) {
         <header className="mobile-header"><button className="icon-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button><KeptLogo /><div><button className="icon-button mobile-assistant" onClick={() => setAssistantOpen(true)} aria-label="Ask Kept"><Sparkles size={18} /></button><button className="icon-button mobile-add" onClick={() => setCaptureOpen(true)} aria-label="Capture something"><Plus size={20} /></button></div></header>
         <div className="content-wrap">
           <div className="page-intro">
-            <div><p className="eyebrow">Your visual memory</p><h1>{pageTitle}</h1></div>
-            {view === 'all' && !hasSearch && <p className="intro-note"><Sparkles size={14} /> Kept has organised <strong>{items.length} {items.length === 1 ? 'thing' : 'things'}</strong> for you</p>}
+            <div><p className="eyebrow">{activeSpaceOwnerId === session.user.id ? 'Your visual memory' : `Shared by ${activeSharedOwnerName}`}</p><h1>{pageTitle}</h1></div>
+            {view === 'all' && !hasSearch && <p className="intro-note"><Sparkles size={14} /> {activeSpaceOwnerId === session.user.id ? 'Kept has organised' : 'Everyone here can find'} <strong>{shownItems.length} {shownItems.length === 1 ? 'thing' : 'things'}</strong></p>}
             {view === 'space' && activeSpaceOwnerId === session.user.id && !hasSearch && <div className="space-page-actions"><button className="auto-fill-space-button" onClick={() => { const space = spaces.find((entry) => entry.ownerId === session.user.id && entry.name === activeSpace); if (space) { setAutoMatchSpaceId(space.id); setSpaceManagerOpen(true) } }}><Sparkles size={14} /> Auto-fill</button><button className="share-space-button" onClick={() => { const space = spaces.find((entry) => entry.ownerId === session.user.id && entry.name === activeSpace); if (space) setSharingSpace(space) }}><Share2 size={14} /> Share space</button></div>}
           </div>
           <div className="search-sticky-shelf">
@@ -1446,6 +1460,7 @@ function LibraryApp({ session }: { session: Session }) {
             <div className="search-scope" aria-label="Active search filters">
               <span className="search-scope-label"><Layers2 size={13} /> Searching within</span>
               <div className="search-scope-chips">
+                {activeSpaceOwnerId !== session.user.id && view !== 'space' && <button type="button" className="search-scope-chip" onClick={clearViewScope} aria-label={`Remove ${activeSharedOwnerName} shared library search filter`}><Users size={12} /> {activeSharedOwnerName}’s library <X size={11} /></button>}
                 {view === 'favourites' && <button type="button" className="search-scope-chip" onClick={clearViewScope} aria-label="Remove Favourites search filter"><Heart size={12} /> Favourites <X size={11} /></button>}
                 {view === 'space' && <button type="button" className="search-scope-chip" onClick={clearViewScope} aria-label={`Remove ${activeSpace} space search filter`}><Folder size={12} /> Space: {activeSpace} <X size={11} /></button>}
                 {kind !== 'all' && <button type="button" className="search-scope-chip" onClick={() => setKind('all')} aria-label={`Remove ${kindLabel(kind)} type search filter`}>Type: {kindLabel(kind)}s <X size={11} /></button>}
@@ -1496,7 +1511,7 @@ function LibraryApp({ session }: { session: Session }) {
         <AssistantButton onClick={() => { setAssistantOpen(true); setSelectedId(null); setCaptureOpen(false) }} />
       </main>
 
-      <CaptureModal open={captureOpen} currentUserId={session.user.id} targetSpace={captureTarget} initialValue={incomingCapture?.value} initialTab={incomingCapture?.tab} onClose={() => { setCaptureOpen(false); setIncomingCapture(null) }} onCaptured={(item) => { setIncomingCapture(null); setItems((all) => item.duplicate ? all.map((existing) => existing.id === item.id ? { ...item, duplicate: undefined } : existing) : [item, ...all]); if (captureTarget && !item.duplicate) { setView('space'); setActiveSpace(captureTarget.name); setActiveSpaceOwnerId(captureTarget.ownerId) } else { setView('all'); setActiveSpace(''); setActiveSpaceOwnerId(session.user.id) }; setToast(item.duplicate ? `Already kept in ${item.space}` : `Filed in ${item.space}`); window.setTimeout(() => setSelectedId(item.id), 350) }} />
+      <CaptureModal open={captureOpen} currentUserId={session.user.id} targetSpace={captureTarget} initialValue={incomingCapture?.value} initialTab={incomingCapture?.tab} onClose={() => { setCaptureOpen(false); setIncomingCapture(null) }} onCaptured={(item) => { setIncomingCapture(null); setItems((all) => item.duplicate ? all.map((existing) => existing.id === item.id ? { ...item, duplicate: undefined } : existing) : [item, ...all]); if (captureTarget) { setView(captureTarget.name ? 'space' : 'all'); setActiveSpace(captureTarget.name ?? ''); setActiveSpaceOwnerId(captureTarget.ownerId) } else { setView('all'); setActiveSpace(''); setActiveSpaceOwnerId(session.user.id) }; setToast(item.duplicate ? `Already kept in ${item.space}` : `Filed in ${item.space}`); window.setTimeout(() => setSelectedId(item.id), 350) }} />
       <MobileCaptureDialog open={mobileCaptureOpen} onClose={() => setMobileCaptureOpen(false)} />
       <DetailPanel item={selected} spaces={spaces.filter((space) => space.ownerId === selected?.ownerId)} canEdit={selected ? canEditItem(selected) : false} canDelete={selected ? canDeleteItem(selected) : false} previewRefreshing={selected ? previewingIds.includes(selected.id) : false} onClose={() => setSelectedId(null)} onChat={() => { if (selected) { setAssistantItemId(selected.id); setSelectedId(null); setAssistantOpen(true) } }} onFavourite={() => selected && void toggleFavourite(selected.id)} onMove={(space) => selected && void moveItem(selected.id, space)} onDelete={() => selected && void deleteItem(selected.id)} onRefreshPreview={() => selected && void refreshPreview(selected.id, true, true)} onPreviewFailed={() => { if (selected && selected.ownerId === session.user.id && !previewAttemptedRef.current.has(selected.id)) { previewAttemptedRef.current.add(selected.id); void refreshPreview(selected.id) } }} />
       <SpaceManager
@@ -1514,7 +1529,7 @@ function LibraryApp({ session }: { session: Session }) {
       />
       <ShareSpaceDialog open={Boolean(sharingSpace)} spaceName={sharingSpace?.name ?? ''} currentUserId={session.user.id} onClose={() => setSharingSpace(null)} />
       <ShareLibraryDialog open={librarySharingOpen} currentUserId={session.user.id} onClose={() => setLibrarySharingOpen(false)} />
-      <SpaceInvitationGate onAccepted={(shared) => { setSharedSpaces((all) => [shared, ...all.filter((entry) => entry.ownerUserId !== shared.ownerUserId || entry.name !== shared.name)]); void loadLibrary(false); navigate('space', shared.name, shared.ownerUserId); setToast(`Joined ${shared.name}`) }} onLibraryAccepted={() => { void loadLibrary(false); navigate('all'); setToast('Joined the shared library') }} />
+      <SpaceInvitationGate onAccepted={(shared) => { setSharedSpaces((all) => [shared, ...all.filter((entry) => entry.ownerUserId !== shared.ownerUserId || entry.name !== shared.name)]); void loadLibrary(false); navigate('space', shared.name, shared.ownerUserId); setToast(`Joined ${shared.name}`) }} onLibraryAccepted={(library) => { void loadLibrary(false); navigate('all', undefined, library.ownerUserId); setToast('Joined the shared library') }} />
       <AssistantPanel
         open={assistantOpen}
         userId={session.user.id}

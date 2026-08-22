@@ -168,7 +168,7 @@ SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SECRET_OR_LEGACY_SERVICE_ROLE_KEY
 npm run telegram:webhook -- https://YOUR_DOMAIN
 ```
 
-The helper validates the bot, registers `https://YOUR_DOMAIN/api/telegram/webhook`, and never prints the token. In Kept, sign in, choose **Add from phone**, create a one-time pairing link, and press **Start** in Telegram. Each Telegram account pairs to one Kept account; captures are filed into that account's accessible spaces and exact duplicates are not added twice.
+The helper validates the bot, registers `https://YOUR_DOMAIN/api/telegram/webhook`, and never prints the token. In Kept, sign in, choose **Add from phone**, create a one-time pairing link, and press **Start** in Telegram. Each Telegram account pairs to one Kept account. Personal libraries and editable shared libraries are available as remembered destinations: choose one under **Add from phone**, or send `/destination` to the bot. Every success reply names the destination library and space, and exact duplicates are not added twice.
 
 ## 8. Optional Chrome or Arc extension
 

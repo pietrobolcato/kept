@@ -6,7 +6,9 @@ type TelegramStatus = {
   enabled: boolean
   botUsername: string | null
   connected: boolean
-  connection: { username: string | null; first_name: string | null; created_at: string; last_used_at: string } | null
+  connection: { username: string | null; first_name: string | null; created_at: string; last_used_at: string; default_owner_user_id: string | null } | null
+  destinations: Array<{ ownerUserId: string; label: string; personal: boolean }>
+  destination: { ownerUserId: string; label: string; personal: boolean } | null
 }
 
 export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -63,6 +65,24 @@ export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose:
     }
   }
 
+  const changeDestination = async (ownerUserId: string) => {
+    setLoading(true); setError('')
+    try {
+      const response = await apiFetch('/api/integrations/telegram', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerUserId }),
+      })
+      const data = await response.json() as Pick<TelegramStatus, 'connection' | 'destination' | 'destinations'> & { error?: string }
+      if (!response.ok || !data.destination) throw new Error(data.error || 'Could not change the Telegram destination.')
+      setStatus((current) => current ? { ...current, connection: data.connection, destination: data.destination, destinations: data.destinations } : current)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not change the Telegram destination.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const copyLink = async () => {
     await navigator.clipboard.writeText(deepLink)
     setCopied(true)
@@ -87,6 +107,12 @@ export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose:
             <p>Share a webpage to Telegram, choose your Kept chat, and it will be read, filed and indexed automatically.</p>
             {loading && !status ? <div className="capture-channel-status"><LoaderCircle className="spin" size={14} /> Checking connection…</div> : status?.connected ? <>
               <div className="capture-channel-status connected"><Check size={14} /> Connected as {status.connection?.username ? `@${status.connection.username}` : status.connection?.first_name || 'Telegram user'}</div>
+              <label className="telegram-destination">Save new items to
+                <select value={status.destination?.ownerUserId ?? ''} onChange={(event) => void changeDestination(event.target.value)} disabled={loading}>
+                  {status.destinations.map((destination) => <option key={destination.ownerUserId} value={destination.ownerUserId}>{destination.label}</option>)}
+                </select>
+                <small>The bot remembers this choice. You can also send <strong>/destination</strong> in Telegram.</small>
+              </label>
               <button type="button" className="text-button danger" onClick={() => void disconnect()} disabled={loading}>Disconnect</button>
             </> : deepLink ? <div className="telegram-pairing">
               <a className="primary-button" href={deepLink} target="_blank" rel="noreferrer">Open Telegram <ExternalLink size={14} /></a>
