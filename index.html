@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f3f1eb" />
+    <meta name="description" content="Kept — a visual memory for everything worth finding again." />
+    <script>
+      window.addEventListener('error', function (event) {
+        var target = event.target
+        var source = target && (target.src || target.href)
+        if (!source || source.indexOf('/assets/') === -1) return
+        var recoveryKey = 'kept-asset-recovery'
+        if (sessionStorage.getItem(recoveryKey)) return
+        sessionStorage.setItem(recoveryKey, '1')
+        var fresh = new URL(window.location.href)
+        fresh.searchParams.set('_kept_reload', Date.now().toString())
+        window.location.replace(fresh.toString())
+      }, true)
+      window.addEventListener('vite:preloadError', function () {
+        sessionStorage.removeItem('kept-asset-recovery')
+        window.location.reload()
+      })
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kept" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet" />
+    <title>Kept — visual memory</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

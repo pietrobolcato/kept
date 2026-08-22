@@ -1,0 +1,35 @@
+# Dependencies and builds
+node_modules/
+.cache/
+dist/
+public/index.html
+public/assets/
+*.tsbuildinfo
+
+# Secrets and provider state
+.env
+.env.*
+!.env.example
+.envrc
+.vercel/
+supabase/.branches/
+supabase/.temp/
+
+# Private libraries, import manifests, and uploads
+data/*
+!data/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# Local test and release output
+output/
+.playwright-cli/
+playwright-report/
+test-results/
+coverage/
+
+# Editor and operating-system files
+.DS_Store
+*.log
+.idea/
+.vscode/

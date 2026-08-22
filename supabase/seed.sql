@@ -1,0 +1,2 @@
+-- Kept libraries are private and begin empty. Existing local items can be
+-- transferred after the first account is created with `npm run migrate:local`.

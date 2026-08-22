@@ -1,0 +1,101 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #252620;
+  background: #f5f3ed;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; cursor: pointer; }
+
+main {
+  width: min(520px, calc(100% - 36px));
+  margin: 44px auto;
+  padding: 34px;
+  border: 1px solid #dedbd2;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .62);
+  box-shadow: 0 22px 70px rgba(34, 35, 30, .1);
+}
+
+.mark {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  padding: 12px;
+  border-radius: 15px;
+  background: #252620;
+}
+
+.mark i { width: 6px; height: 18px; background: #f5f3ed; }
+.mark i:nth-child(2) { height: 28px; background: #819145; }
+.mark i:nth-child(3) { height: 14px; background: #d6ef65; }
+
+.eyebrow {
+  margin: 20px 0 7px;
+  color: #8b8d83;
+  font: 11px ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+h1 { margin: 0; font: 500 42px/1.02 Georgia, serif; letter-spacing: -1.5px; }
+.intro { margin: 14px 0 26px; color: #74766d; line-height: 1.55; }
+form { display: grid; gap: 13px; }
+label { display: grid; gap: 6px; color: #77796f; font-size: 12px; font-weight: 600; }
+label small { color: #989a91; font-weight: 400; }
+
+input {
+  height: 48px;
+  padding: 0 13px;
+  border: 1px solid #d7d4cb;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 16px;
+  outline: 0;
+}
+
+input:focus { border-color: #849544; box-shadow: 0 0 0 3px rgba(214, 239, 101, .28); }
+form button { height: 48px; border: 0; border-radius: 10px; background: #252620; color: #fff; font-weight: 700; }
+#error { display: none; margin: 0; padding: 9px; border-radius: 8px; background: #f5e4df; color: #9a493b; font-size: 12px; }
+
+#connected { align-items: center; gap: 12px; padding: 13px; border: 1px solid #cbd8a0; border-radius: 11px; background: #f0f6d8; }
+#connected > span { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #d6ef65; }
+#connected > div:nth-child(2) { min-width: 0; flex: 1; }
+#connected p { overflow: hidden; margin: 3px 0 0; color: #77796f; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.connected-actions { display: grid; gap: 4px; }
+.connected-actions button { border: 0; background: transparent; color: #647039; font-size: 12px; }
+.connected-actions #disconnect { color: #8c5a51; }
+
+.shortcuts { margin-top: 28px; padding-top: 22px; border-top: 1px solid #dedbd2; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 6px; }
+.section-heading .eyebrow { margin: 0 0 5px; }
+.section-heading h2 { margin: 0; font-size: 17px; }
+.shortcut-summary { padding: 5px 8px; border-radius: 999px; background: #edf3d2; color: #657038; font: 10px ui-monospace, monospace; text-transform: uppercase; white-space: nowrap; }
+.shortcut-summary.needs-attention { background: #f3e8d2; color: #8a5b32; }
+.shortcut-row { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(222, 219, 210, .7); }
+.shortcut-row kbd { padding: 8px 6px; border: 1px solid #d6d3ca; border-radius: 8px; background: #fff; text-align: center; box-shadow: 0 2px 0 #d6d3ca; font-size: 12px; }
+.shortcut-row span { display: grid; gap: 3px; }
+.shortcut-row small, .fallbacks small { color: #85877e; line-height: 1.35; }
+.shortcut-row em { width: 8px; height: 8px; border-radius: 50%; background: #91a442; }
+.shortcut-row em.missing { background: #d28b51; }
+.arc-help { margin: 14px 0 4px; padding: 13px; border: 1px solid #e2cdaa; border-radius: 10px; background: #f8f1e4; }
+.arc-help strong { font-size: 13px; }
+.arc-help p { margin: 5px 0 0; color: #806d58; font-size: 12px; line-height: 1.45; }
+.shortcut-settings { width: 100%; height: 43px; margin-top: 14px; border: 1px solid #d7d4cb; border-radius: 9px; background: #fff; color: #59652e; font-weight: 650; }
+.shortcut-settings:hover { border-color: #9dac61; background: #f7fadf; }
+.shortcut-address { margin: 9px 0 0; color: #8a8c83; font-size: 11px; text-align: center; }
+.shortcut-address code { color: #5f6741; }
+.fallbacks { display: grid; gap: 10px; margin-top: 25px; padding-top: 3px; }
+.fallbacks .eyebrow { margin-bottom: 0; }
+.fallbacks > div { display: grid; gap: 3px; padding: 11px 13px; border-radius: 10px; background: #eeece6; }
+.fallbacks strong { font-size: 13px; }
+
+@media (max-width: 540px) {
+  main { padding: 25px; }
+  .shortcut-row { grid-template-columns: 100px minmax(0, 1fr); }
+  .shortcut-row em { display: none; }
+}

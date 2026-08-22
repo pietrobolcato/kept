@@ -1,0 +1,60 @@
+{
+  "name": "kept-visual-memory",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n web,api -c blue,green \"vite\" \"tsx watch server/index.ts\"",
+    "build": "tsc -b && vite build",
+    "vercel-build": "npm run build && node scripts/prepare-vercel-static.mjs",
+    "start": "tsx server/index.ts --production",
+    "import:apple": "node scripts/import-apple.mjs",
+    "backfill:dedupe": "tsx scripts/backfill-dedupe.ts",
+    "backfill:photo-dates": "node scripts/backfill-photo-dates.mjs",
+    "telegram:webhook": "node scripts/configure-telegram.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "check:release": "node scripts/check-release.mjs",
+    "test:import-links": "node --test scripts/import-apple-links.test.mjs",
+    "test:date-search": "node --import tsx --test server/date-search.test.ts",
+    "test": "npm run test:import-links && npm run test:date-search && node --import tsx --test server/search-index.test.ts",
+    "migrate:local": "node scripts/migrate-local.mjs",
+    "typecheck": "tsc -b",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
+    "@vitejs/plugin-react": "latest",
+    "cheerio": "^1.2.0",
+    "cors": "latest",
+    "dotenv": "^17.4.2",
+    "exifr": "^7.1.3",
+    "express": "latest",
+    "lucide-react": "latest",
+    "marked": "^16.4.2",
+    "multer": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "sharp": "^0.35.3",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/cors": "latest",
+    "@types/express": "latest",
+    "@types/multer": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "concurrently": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest"
+  }
+}
