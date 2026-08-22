@@ -4,8 +4,6 @@ Kept is a self-hostable visual memory for the things you do not want to lose. Sa
 
 ![Kept — save, understand, recall, and discover](docs/media/kept-github-preview.gif)
 
-[▶ Watch with sound — 22 seconds, 694 KB](https://raw.githubusercontent.com/pietrobolcato/kept/main/docs/media/kept-github-film.mp4)
-
 It includes:
 
 - A responsive, installable React web app.
