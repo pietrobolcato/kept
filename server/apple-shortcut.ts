@@ -288,7 +288,9 @@ export function createAppleShortcutPrivateRouter() {
     if (error) return response.status(503).json({ error: `Shortcut pairing could not be created: ${error.message}` })
     const origin = appOrigin(request)
     const payload = JSON.stringify({ keptPair: code, baseUrl: origin })
-    const runUrl = `shortcuts://run-shortcut?name=${encodeURIComponent('Keep in Kept')}&input=text&text=${encodeURIComponent(payload)}`
+    // iOS installs the signed artifact using its exported filename. Keep this
+    // exact so the deep link resolves the Shortcut already visible on-device.
+    const runUrl = `shortcuts://run-shortcut?name=${encodeURIComponent('Keep-in-Kept')}&input=text&text=${encodeURIComponent(payload)}`
     response.status(201).json({ runUrl, expiresAt, installUrl: `${origin}/downloads/Keep-in-Kept.shortcut` })
   })
 
