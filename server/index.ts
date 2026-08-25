@@ -15,6 +15,7 @@ import { ensureSearchIndex, searchItems, searchItemsByColour } from './search-in
 import { createSharingRouter } from './sharing.js'
 import { createSpace, deleteSpace, listSpaces, reorderSpaces, updateSpace } from './spaces.js'
 import { createTelegramPrivateRouter, createTelegramPublicRouter } from './telegram.js'
+import { createAppleShortcutPrivateRouter, createAppleShortcutPublicRouter } from './apple-shortcut.js'
 import { recallTasteProfile } from './taste-profile.js'
 import {
   authenticate,
@@ -65,6 +66,7 @@ app.get('/api/health', (_request, response) => {
 })
 
 app.use('/api', createTelegramPublicRouter())
+app.use('/api', createAppleShortcutPublicRouter())
 
 app.get('/api/extension/config', (_request, response) => {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
@@ -87,6 +89,7 @@ app.use('/api', async (request, response, next) => {
 
 app.use('/api', createSharingRouter())
 app.use('/api', createTelegramPrivateRouter())
+app.use('/api', createAppleShortcutPrivateRouter())
 
 function auth(response: express.Response) {
   return response.locals.auth as AuthContext

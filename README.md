@@ -12,7 +12,7 @@ It includes:
 - Voyage embeddings, typo-tolerant relevance ranking, deterministic filters, and colour search.
 - Durable private copies of uploads, videos, and link previews in Supabase Storage.
 - Personal spaces, whole-library or per-space collaboration, and permissioned invitation links.
-- Telegram capture, a Chrome/Arc extension, and a guided Apple Notes/Photos importer.
+- Native iPhone Share Sheet capture through a paired Apple Shortcut, Telegram capture, a Chrome/Arc extension, and a guided Apple Notes/Photos importer.
 
 ## Quick start
 
@@ -42,10 +42,10 @@ For an autonomous coding agent, use the [agent setup runbook](docs/agent-setup.m
 ## Architecture
 
 ```text
-React + Vite PWA ─┐
-Chrome extension ─┼─> Express API ─> Supabase Auth / Postgres / private Storage
-Telegram webhook ─┘         ├──────> Anthropic (vision, assistant, web search)
-                            └──────> Voyage AI (512-dimensional embeddings)
+React + Vite PWA ──┐
+Apple Shortcut ────┼─> Express API ─> Supabase Auth / Postgres / private Storage
+Chrome extension ──┤         ├──────> Anthropic (vision, assistant, web search)
+Telegram webhook ──┘         └──────> Voyage AI (512-dimensional embeddings)
 ```
 
 The browser receives only Supabase's publishable key. `SUPABASE_SERVICE_ROLE_KEY`, Anthropic, Voyage, and Telegram credentials are server-only. Normal application requests carry the signed-in user's Supabase JWT and remain constrained by database and Storage policies.
@@ -54,6 +54,7 @@ The browser receives only Supabase's publishable key. `SUPABASE_SERVICE_ROLE_KEY
 
 ```bash
 npm run dev            # Vite on :3456 and Express on :8787
+npm run shortcut:build # rebuild and sign the optional Apple Shortcut on macOS
 npm run check          # types, lint, tests, and production build
 npm run check:release  # ignored-file and credential safety audit
 ```

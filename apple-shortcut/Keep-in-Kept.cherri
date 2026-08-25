@@ -1,0 +1,151 @@
+#define name Keep in Kept
+#define color green
+#define glyph archive
+#define inputs image, media, url, text, webpage, file
+#define from sharesheet, search
+#define noinput stopwith "Share a link, photo, video or note to Keep in Kept."
+#define version 18.4
+
+#include 'actions/web'
+#include 'actions/text'
+#include 'actions/documents'
+#include 'actions/device'
+#include 'actions/images'
+#include 'actions/media'
+#include 'actions/crypto'
+
+// Cherri's standard fileRequest declaration limits the body to a dictionary.
+// Apple's File request accepts any Shortcut value, which is what lets us send
+// an image or video as the raw HTTP body without exposing a browser session.
+action 'downloadurl' keptFileRequest(
+    text url: 'WFURL',
+    HTTPMethod ?method: 'WFHTTPMethod',
+    variable body: 'WFRequestVariable',
+    dictionary! ?headers: 'WFHTTPHeaders',
+) {
+    "WFHTTPBodyType": "File"
+}
+
+const initialTypeResult = typeOf(ShortcutInput)
+@initialType = "{initialTypeResult}"
+
+// Kept launches this same public Shortcut with a one-time JSON payload to pair
+// it. The returned credential is revocable and is stored in Shortcuts' private
+// iCloud Drive folder; a user's Supabase session never enters the Shortcut.
+if @initialType contains "Text" {
+    @initialText = getText(ShortcutInput)
+    if @initialText contains '"keptPair"' {
+        const pairing = getDictionary(@initialText)
+        @pairCode = "{pairing['keptPair']}"
+        @pairBaseUrl = "{pairing['baseUrl']}"
+        const deviceName = getDeviceDetail("Device Name")
+        const pairedConnection = jsonRequest(
+            "{@pairBaseUrl}/api/apple-shortcut/pair",
+            "POST",
+            {"code": "{@pairCode}", "deviceName": "{deviceName}"}
+        )
+        createFolder("Kept")
+        saveFile("Kept/connection.json", pairedConnection, true)
+        showNotification("You can now share links, photos, videos and notes straight to Kept.", "Keep in Kept is connected", true)
+        stop()
+    }
+}
+
+const connectionFile = getFile("Kept/connection.json", nil, false)
+if !connectionFile {
+    alert("Open Kept → Add from your phone → Apple Shortcut, then tap Connect.", "Connect Keep in Kept")
+    stop()
+}
+
+const connection = getDictionary(connectionFile)
+@baseUrl = "{connection['baseUrl']}"
+@token = "{connection['token']}"
+const destinationResponse = downloadURL(
+    "{@baseUrl}/api/apple-shortcut/destinations",
+    {"Authorization": "Bearer {@token}"}
+)
+const destinationEnvelope = getDictionary(destinationResponse)
+const choicesValue = getValue(destinationEnvelope, "choices")
+const choices = getDictionary(choicesValue)
+const destinationLabels = getKeys(choices)
+const chosenLabel = chooseFromList(destinationLabels, "Where should this go?")
+const chosenDestination = getValue(choices, chosenLabel)
+@destination = "{chosenDestination}"
+
+for sharedItem in ShortcutInput {
+    const sharedTypeResult = typeOf(@sharedItem)
+    @sharedType = "{sharedTypeResult}"
+    @filename = getName(@sharedItem)
+    @receipt = ""
+
+    if @sharedType contains "Image" {
+        const jpeg = convertToJPEG(@sharedItem, 0.88, true)
+        const jpegHash = hash(jpeg, "SHA256")
+        const imageTicketResult = jsonRequest(
+            "{@baseUrl}/api/apple-shortcut/upload-ticket",
+            "POST",
+            {"destination": "{@destination}", "kind": "image", "contentType": "image/jpeg", "filename": "{@filename}.jpg", "contentFingerprint": "{jpegHash}"},
+            {"Authorization": "Bearer {@token}"}
+        )
+        const imageTicket = getDictionary(imageTicketResult)
+        @imageUploadUrl = "{imageTicket['uploadUrl']}"
+        @imageStoragePath = "{imageTicket['storagePath']}"
+        keptFileRequest("{@imageUploadUrl}", "PUT", jpeg, {"Content-Type": "image/jpeg"})
+        const imageResult = jsonRequest(
+            "{@baseUrl}/api/apple-shortcut/capture-staged",
+            "POST",
+            {"destination": "{@destination}", "kind": "image", "contentType": "image/jpeg", "filename": "{@filename}.jpg", "contentFingerprint": "{jpegHash}", "storagePath": "{@imageStoragePath}"},
+            {"Authorization": "Bearer {@token}"}
+        )
+        const savedImage = getDictionary(imageResult)
+        @receipt = "{savedImage['receipt']}"
+    } else {
+        if @sharedType contains "Media" {
+            const video = encodeVideo(@sharedItem, "1280×720")
+            const videoHash = hash(video, "SHA256")
+            const videoTicketResult = jsonRequest(
+                "{@baseUrl}/api/apple-shortcut/upload-ticket",
+                "POST",
+                {"destination": "{@destination}", "kind": "video", "contentType": "video/mp4", "filename": "{@filename}.mp4", "contentFingerprint": "{videoHash}"},
+                {"Authorization": "Bearer {@token}"}
+            )
+            const videoTicket = getDictionary(videoTicketResult)
+            @videoUploadUrl = "{videoTicket['uploadUrl']}"
+            @videoStoragePath = "{videoTicket['storagePath']}"
+            keptFileRequest("{@videoUploadUrl}", "PUT", video, {"Content-Type": "video/mp4"})
+            const videoResult = jsonRequest(
+                "{@baseUrl}/api/apple-shortcut/capture-staged",
+                "POST",
+                {"destination": "{@destination}", "kind": "video", "contentType": "video/mp4", "filename": "{@filename}.mp4", "contentFingerprint": "{videoHash}", "storagePath": "{@videoStoragePath}"},
+                {"Authorization": "Bearer {@token}"}
+            )
+            const savedVideo = getDictionary(videoResult)
+            @receipt = "{savedVideo['receipt']}"
+        } else {
+            const extractedUrls = getURLs("{@sharedItem}")
+            if extractedUrls {
+                const firstUrl = getFirstItem(extractedUrls)
+                const linkResult = jsonRequest(
+                    "{@baseUrl}/api/apple-shortcut/capture",
+                    "POST",
+                    {"type": "link", "value": "{firstUrl}", "destination": "{@destination}"},
+                    {"Authorization": "Bearer {@token}"}
+                )
+                const savedLink = getDictionary(linkResult)
+                @receipt = "{savedLink['receipt']}"
+            } else {
+                @noteText = getText(@sharedItem)
+                const noteResult = jsonRequest(
+                    "{@baseUrl}/api/apple-shortcut/capture",
+                    "POST",
+                    {"type": "note", "value": "{@noteText}", "destination": "{@destination}"},
+                    {"Authorization": "Bearer {@token}"}
+                )
+                const savedNote = getDictionary(noteResult)
+                @receipt = "{savedNote['receipt']}"
+            }
+        }
+    }
+
+    showNotification("{@receipt}", "Kept ✓", true)
+}

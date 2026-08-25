@@ -143,18 +143,33 @@ kbd {
 .capture-channel.featured { border-color: rgba(90,107,42,.28); background: linear-gradient(145deg, rgba(214,239,101,.16), rgba(255,255,255,.5) 62%); }
 .capture-channel-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: #e6e4dd; color: #60635a; }
 .capture-channel-icon.telegram { background: var(--ink); color: var(--lime); }
+.capture-channel-icon.apple { background: var(--lime); color: #4f592c; box-shadow: inset 0 0 0 1px rgba(89,103,43,.16); }
 .capture-channel-copy { min-width: 0; }
 .channel-kicker { display: block; margin: 1px 0 6px; color: #83857b; font: 11px var(--mono); text-transform: uppercase; letter-spacing: .7px; }
 .capture-channel h3 { margin: 0; font-size: 14px; line-height: 1.25; }
-.capture-channel p, .capture-channel ol { margin: 8px 0 0; color: #73756d; font-size: 10px; line-height: 1.65; }
+.capture-channel p, .capture-channel ol { margin: 8px 0 0; color: #73756d; font-size: 13px; line-height: 1.55; }
 .capture-channel ol { padding-left: 17px; }
 .capture-channel ol svg { display: inline; vertical-align: -2px; }
-.capture-channel .primary-button, .capture-channel .secondary-button { width: fit-content; min-height: 36px; margin-top: 13px; padding: 0 13px; text-decoration: none; font-size: 11px; }
+.capture-channel .primary-button, .capture-channel .secondary-button { width: fit-content; min-height: 40px; margin-top: 13px; padding: 0 14px; text-decoration: none; font-size: 13px; }
 .capture-channel-status { width: fit-content; display: flex; align-items: center; gap: 6px; margin-top: 13px; padding: 7px 9px; border-radius: 7px; background: #e9e7e0; color: #6e7068; font: 11px var(--mono); }
 .capture-channel-status.connected { background: rgba(214,239,101,.28); color: #59662e; }
 .capture-channel-status.pending { max-width: 420px; line-height: 1.5; }
 .telegram-pairing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .telegram-pairing > p { flex-basis: 100%; margin-top: 1px; }
+.shortcut-steps { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 14px; }
+.shortcut-steps > div { min-height: 61px; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(76,81,66,.12); border-radius: 9px; background: rgba(255,255,255,.5); }
+.shortcut-steps i { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #e6efba; color: #59652e; font: 11px var(--mono); font-style: normal; }
+.shortcut-steps span, .shortcut-connection span { min-width: 0; display: grid; gap: 2px; }
+.shortcut-steps strong, .shortcut-connection strong { color: #44473f; font-size: 12px; }
+.shortcut-steps small, .shortcut-connection small { color: #85877e; font-size: 10px; line-height: 1.35; }
+.shortcut-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.shortcut-actions .text-button { margin: 13px 0 0 3px; }
+.shortcut-return { font-size: 11px !important; }
+.shortcut-return a { color: #62712f; font-weight: 600; }
+.shortcut-connections { display: grid; gap: 6px; margin-top: 11px; }
+.shortcut-connection { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid rgba(76,81,66,.12); border-radius: 8px; background: rgba(255,255,255,.48); }
+.shortcut-connection button { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #8d7267; }
+.shortcut-connection button:hover { background: rgba(169,80,59,.09); color: #a9503b; }
 .telegram-destination { width: min(330px, 100%); display: grid; gap: 6px; margin-top: 13px; color: #62655b; font-size: 12px; font-weight: 600; }
 .telegram-destination select { width: 100%; min-height: 40px; padding: 0 36px 0 11px; border: 1px solid rgba(69,73,62,.17); border-radius: 8px; background: rgba(255,255,255,.72); color: var(--ink); font-size: 16px; }
 .telegram-destination small { color: #85877e; font-size: 11px; font-weight: 400; line-height: 1.45; }

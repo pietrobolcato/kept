@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Copy, ExternalLink, LoaderCircle, Send, Share2, Smartphone, X } from 'lucide-react'
+import { Apple, Check, Copy, Download, ExternalLink, LoaderCircle, Send, Share2, Smartphone, Trash2, X } from 'lucide-react'
 import { apiFetch } from './lib/api'
 
 type TelegramStatus = {
@@ -11,12 +11,29 @@ type TelegramStatus = {
   destination: { ownerUserId: string; label: string; personal: boolean } | null
 }
 
+type ShortcutStatus = {
+  enabled: boolean
+  connected: boolean
+  connections: Array<{ id: string; device_name: string; created_at: string; last_used_at: string | null }>
+}
+
+type ShortcutPairing = { runUrl: string; installUrl: string; expiresAt: string }
+
+function compactDate(value: string | null) {
+  if (!value) return 'Never used'
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(value))
+}
+
 export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [status, setStatus] = useState<TelegramStatus | null>(null)
   const [deepLink, setDeepLink] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatus | null>(null)
+  const [shortcutPairing, setShortcutPairing] = useState<ShortcutPairing | null>(null)
+  const [shortcutLoading, setShortcutLoading] = useState(false)
+  const [shortcutError, setShortcutError] = useState('')
   const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone))
 
   const refresh = useCallback(async () => {
@@ -34,10 +51,63 @@ export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose:
     }
   }, [])
 
+  const refreshShortcut = useCallback(async () => {
+    setShortcutLoading(true); setShortcutError('')
+    try {
+      const response = await apiFetch('/api/integrations/apple-shortcut')
+      const data = await response.json() as ShortcutStatus & { error?: string }
+      if (!response.ok) throw new Error(data.error || 'Could not load Apple Shortcut connections.')
+      setShortcutStatus(data)
+      if (data.connected) setShortcutPairing(null)
+    } catch (nextError) {
+      setShortcutError(nextError instanceof Error ? nextError.message : 'Could not load Apple Shortcut connections.')
+    } finally {
+      setShortcutLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    if (open) void refresh()
-    else { setDeepLink(''); setError(''); setCopied(false) }
-  }, [open, refresh])
+    if (open) { void refresh(); void refreshShortcut() }
+    else { setDeepLink(''); setError(''); setCopied(false); setShortcutPairing(null); setShortcutError('') }
+  }, [open, refresh, refreshShortcut])
+
+  useEffect(() => {
+    if (!open) return
+    const returned = () => { if (document.visibilityState === 'visible') void refreshShortcut() }
+    document.addEventListener('visibilitychange', returned)
+    window.addEventListener('focus', returned)
+    return () => { document.removeEventListener('visibilitychange', returned); window.removeEventListener('focus', returned) }
+  }, [open, refreshShortcut])
+
+  const connectShortcut = async () => {
+    setShortcutLoading(true); setShortcutError('')
+    try {
+      const response = await apiFetch('/api/integrations/apple-shortcut/pairing', { method: 'POST' })
+      const data = await response.json() as ShortcutPairing & { error?: string }
+      if (!response.ok || !data.runUrl) throw new Error(data.error || 'Could not start Shortcut pairing.')
+      setShortcutPairing(data)
+      window.location.assign(data.runUrl)
+    } catch (nextError) {
+      setShortcutError(nextError instanceof Error ? nextError.message : 'Could not start Shortcut pairing.')
+    } finally {
+      setShortcutLoading(false)
+    }
+  }
+
+  const revokeShortcut = async (connectionId: string) => {
+    setShortcutLoading(true); setShortcutError('')
+    try {
+      const response = await apiFetch(`/api/integrations/apple-shortcut/${connectionId}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error || 'Could not revoke that Shortcut connection.')
+      }
+      await refreshShortcut()
+    } catch (nextError) {
+      setShortcutError(nextError instanceof Error ? nextError.message : 'Could not revoke that Shortcut connection.')
+      setShortcutLoading(false)
+    }
+  }
 
   const pair = async () => {
     setLoading(true); setError('')
@@ -99,6 +169,40 @@ export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose:
       </header>
 
       <div className="mobile-capture-content">
+        <article className="capture-channel featured shortcut-channel">
+          <div className="capture-channel-icon apple"><Apple size={20} /></div>
+          <div className="capture-channel-copy">
+            <span className="channel-kicker">Native iPhone share sheet</span>
+            <h3>Keep it with one share</h3>
+            <p>Install once, connect this device, then share links, photos, videos or text straight from any app. You choose a personal or shared space each time.</p>
+
+            {shortcutLoading && !shortcutStatus ? <div className="capture-channel-status"><LoaderCircle className="spin" size={14} /> Checking connection…</div> : shortcutStatus?.connected ? <>
+              <div className="capture-channel-status connected"><Check size={14} /> Apple Shortcut connected</div>
+              <div className="shortcut-connections">
+                {shortcutStatus.connections.map((connection) => <div className="shortcut-connection" key={connection.id}>
+                  <span><strong>{connection.device_name}</strong><small>{connection.last_used_at ? `Last used ${compactDate(connection.last_used_at)}` : `Connected ${compactDate(connection.created_at)}`}</small></span>
+                  <button type="button" onClick={() => void revokeShortcut(connection.id)} disabled={shortcutLoading} aria-label={`Revoke ${connection.device_name}`}><Trash2 size={14} /></button>
+                </div>)}
+              </div>
+              <div className="shortcut-actions">
+                <a className="secondary-button" href="/downloads/Keep-in-Kept.shortcut"><Download size={14} /> Install again</a>
+                <button type="button" className="text-button" onClick={() => void connectShortcut()} disabled={shortcutLoading}>Reconnect</button>
+              </div>
+            </> : shortcutStatus?.enabled ? <>
+              <div className="shortcut-steps">
+                <div><i>1</i><span><strong>Install</strong><small>Apple asks you to confirm Add Shortcut.</small></span></div>
+                <div><i>2</i><span><strong>Connect</strong><small>Pairs it securely with this Kept account.</small></span></div>
+              </div>
+              <div className="shortcut-actions">
+                <a className="primary-button" href="/downloads/Keep-in-Kept.shortcut"><Download size={14} /> Install Shortcut</a>
+                <button type="button" className="secondary-button" onClick={() => void connectShortcut()} disabled={shortcutLoading}>{shortcutLoading ? <LoaderCircle className="spin" size={14} /> : <Apple size={14} />} Connect</button>
+              </div>
+              {shortcutPairing && <p className="shortcut-return">If Shortcuts did not open, <a href={shortcutPairing.runUrl}>tap here to continue pairing</a>. The connection link expires in 10 minutes.</p>}
+            </> : <div className="capture-channel-status pending">Apple Shortcut capture needs service access configured on this Kept server.</div>}
+            {shortcutError && <p className="form-error" role="alert">{shortcutError}</p>}
+          </div>
+        </article>
+
         <article className="capture-channel featured">
           <div className="capture-channel-icon telegram"><Send size={19} /></div>
           <div className="capture-channel-copy">
@@ -133,7 +237,7 @@ export function MobileCaptureDialog({ open, onClose }: { open: boolean; onClose:
           </div>
         </article>
 
-        <div className="direct-share-note"><Share2 size={16} /><p><strong>Direct web share is included where the phone supports PWA share targets.</strong> On iPhone, Telegram is the reliable share-sheet route today; a native Kept share extension can follow later.</p></div>
+        <div className="direct-share-note"><Share2 size={16} /><p><strong>Two good ways to capture.</strong> Use the Apple Shortcut when you want to choose the destination in the moment. Use Telegram when you prefer sending quickly to a remembered default.</p></div>
       </div>
     </section>
   </div>

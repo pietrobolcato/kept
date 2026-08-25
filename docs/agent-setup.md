@@ -109,6 +109,8 @@ After the final URL exists, the operator must update Supabase Auth Site URL and 
 
 ## Phase F — optional integrations
 
+Apple Shortcut: confirm `SUPABASE_SERVICE_ROLE_KEY` and `PUBLIC_APP_URL=https://FINAL_DOMAIN` are server-only deployment variables. The signed Shortcut is already in `public/downloads`; rebuilding it requires macOS, Cherri, and `npm run shortcut:build`. Pairing itself is performed by each signed-in user under **Add from phone**.
+
 Telegram, only after all four server values are configured and the operator authorizes changing the webhook:
 
 ```bash

@@ -5,6 +5,9 @@ dist/
 public/index.html
 public/assets/
 *.tsbuildinfo
+apple-shortcut/*_unsigned.shortcut
+apple-shortcut/*_processed.cherri
+apple-shortcut/*.plist
 
 # Secrets and provider state
 .env

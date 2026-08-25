@@ -86,10 +86,11 @@ Kept requests 512-dimensional Voyage vectors because the database column is `vec
 
 Without Anthropic, capture falls back to basic deterministic classification and the assistant is unavailable. Without Voyage, text and deterministic filters still work but semantic ranking is unavailable.
 
-The service-role/secret key is not needed for normal browser use. Add it only for Telegram and administrative backfills:
+The service-role/secret key is not needed for normal browser use. Add it only for Apple Shortcut capture, Telegram, and administrative backfills:
 
 ```dotenv
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SECRET_OR_LEGACY_SERVICE_ROLE_KEY
+PUBLIC_APP_URL=https://YOUR_DOMAIN
 ```
 
 This value bypasses RLS. It must exist only in the server environment and must never be prefixed with `VITE_`.
@@ -150,7 +151,29 @@ HOST=0.0.0.0 PORT=8787 npm start
 
 Set all environment variables through the host's secret manager. Terminate HTTPS at the platform proxy and expose the configured `PORT`. The Express process serves both the API and the built web app in production.
 
-## 7. Optional Telegram capture
+## 7. Optional Apple Shortcut capture
+
+Kept includes a signed, reusable **Keep in Kept** Shortcut in `public/downloads`. It accepts links, text, photos, and videos from the iPhone/iPad Share Sheet. The public Shortcut contains no account credential. Each device exchanges a ten-minute, one-use pairing code for a random revocable capture token; the database stores only its SHA-256 hash.
+
+1. Set `SUPABASE_SERVICE_ROLE_KEY` and the canonical `PUBLIC_APP_URL` on the server, then deploy.
+2. In Kept, sign in and choose **Add from phone**.
+3. Tap **Install Shortcut** and confirm **Add Shortcut** in Apple's Shortcuts app.
+4. Return to Kept and tap **Connect**. Kept launches the installed Shortcut with the one-use pairing payload.
+5. Share something from any app, choose **Keep in Kept**, then choose a current personal or editable shared destination.
+
+Kept lists the current Shortcut connection with its last-used date and lets the owner revoke it immediately. A revoked Shortcut is refused on its next request. The private configuration is stored in the user's Shortcuts iCloud folder and can therefore follow that user's Apple devices; reconnecting replaces the previous credential. If a user has imported but not connected the Shortcut, Kept cannot distinguish that from a missing installation; iOS provides no website API for inspecting installed Shortcuts.
+
+The checked-in signed file is ready to use. Maintainers changing `apple-shortcut/Keep-in-Kept.cherri` can rebuild it on macOS:
+
+```bash
+brew tap electrikmilk/cherri
+brew install electrikmilk/cherri/cherri
+npm run shortcut:build
+```
+
+The build signs the result for **Anyone** through Apple's local `shortcuts` signing service. Commit the regenerated `public/downloads/Keep-in-Kept.shortcut` together with its source change.
+
+## 8. Optional Telegram capture
 
 1. Open BotFather in Telegram, run `/newbot`, and save the bot token.
 2. Put the token and username in the deployment's server environment.
@@ -170,7 +193,7 @@ npm run telegram:webhook -- https://YOUR_DOMAIN
 
 The helper validates the bot, registers `https://YOUR_DOMAIN/api/telegram/webhook`, and never prints the token. In Kept, sign in, choose **Add from phone**, create a one-time pairing link, and press **Start** in Telegram. Each Telegram account pairs to one Kept account. Personal libraries and editable shared libraries are available as remembered destinations: choose one under **Add from phone**, or send `/destination` to the bot. Every success reply names the destination library and space, and exact duplicates are not added twice.
 
-## 8. Optional Chrome or Arc extension
+## 9. Optional Chrome or Arc extension
 
 1. Open `chrome://extensions` (or `arc://extensions`).
 2. Enable **Developer mode**.
@@ -181,7 +204,7 @@ The helper validates the bot, registers `https://YOUR_DOMAIN/api/telegram/webhoo
 
 The extension stores the chosen instance URL and the user's refreshable Supabase session in extension-local storage. Changing instances clears the previous session.
 
-## 9. Optional Apple import
+## 10. Optional Apple import
 
 On the Mac containing the source library, install `ffmpeg` if the album includes videos:
 
@@ -199,7 +222,7 @@ npm run import:apple -- --note "Saved things" --album "Inspiration"
 
 For a deployed API, append `--api https://YOUR_DOMAIN`. See [Apple import details](apple-import.md).
 
-## 10. Fully local Supabase for development
+## 11. Fully local Supabase for development
 
 This requires Docker. It is useful for development, but operating Supabase itself in production is a separate infrastructure responsibility.
 
@@ -211,7 +234,7 @@ npx supabase@latest status
 
 Copy the local API URL, anon key, and—only if needed—service-role key printed by `status` into `.env`. The checked-in `supabase/config.toml` already allows the local Kept URLs and immediate email signup.
 
-## 11. Backups and upgrades
+## 12. Backups and upgrades
 
 - Enable Supabase backups appropriate to your plan and periodically test a restore.
 - Back up both Postgres and the private `kept-images` Storage bucket; either alone is incomplete.
@@ -226,4 +249,6 @@ Copy the local API URL, anon key, and—only if needed—service-role key printe
 - **Semantic results missing:** check `VOYAGE_API_KEY`; do not change the 512-dimensional contract without a migration.
 - **Video upload rejected:** compare the file size with both the `kept-images` bucket limit and the project's global Storage limit.
 - **Extension cannot connect:** enter the full deployed `https://` URL in Extension options and ensure `/api/extension/config` returns JSON.
+- **Shortcut does not open during Connect:** install **Keep in Kept** first, return to the open Kept sheet, and tap **Connect** again. Confirm `PUBLIC_APP_URL` uses the deployed HTTPS origin.
+- **Shortcut says its connection was revoked:** open **Add from phone** and connect it again. Never paste a Supabase access token or service key into the Shortcut.
 - **Telegram does not answer:** redeploy after setting all four Telegram/service variables, rerun `npm run telegram:webhook`, and verify that the public webhook URL is HTTPS.
