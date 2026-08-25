@@ -72,11 +72,7 @@ async function shortcutDestinations(client: SupabaseClient, userId: string): Pro
   if (directResult.error) throw new Error(`Shortcut shared spaces could not be loaded: ${directResult.error.message}`)
 
   const libraryOwnerIds = new Set((libraryResult.data ?? []).map((row) => row.owner_user_id as string))
-  const directSpaces = new Map((directResult.data ?? []).map((row) => [`${row.owner_user_id}:${row.space_name}`, row]))
   const relevantOwnerIds = new Set([userId, ...libraryOwnerIds, ...(directResult.data ?? []).map((row) => row.owner_user_id as string)])
-  const spacesResult = await client.from('spaces').select('user_id,name,position')
-    .in('user_id', [...relevantOwnerIds]).order('position').order('created_at')
-  if (spacesResult.error) throw new Error(`Shortcut spaces could not be loaded: ${spacesResult.error.message}`)
   const labels = new Map<string, string>([[userId, 'My library']])
   await Promise.all([...relevantOwnerIds].filter((id) => id !== userId).map(async (id) => {
     const { data } = await client.auth.admin.getUserById(id)
@@ -84,15 +80,20 @@ async function shortcutDestinations(client: SupabaseClient, userId: string): Pro
   }))
 
   const destinations: ShortcutDestination[] = [{
-    id: encodeDestination(userId, ''), label: 'My library · Auto-file', ownerUserId: userId, spaceName: '',
+    id: encodeDestination(userId, ''), label: 'My library', ownerUserId: userId, spaceName: '',
   }]
   for (const ownerUserId of libraryOwnerIds) destinations.push({
-    id: encodeDestination(ownerUserId, ''), label: `${labels.get(ownerUserId) ?? 'Shared library'} · Auto-file`, ownerUserId, spaceName: '',
+    id: encodeDestination(ownerUserId, ''), label: labels.get(ownerUserId) ?? 'Shared library', ownerUserId, spaceName: '',
   })
-  for (const row of spacesResult.data ?? []) {
-    const ownerUserId = row.user_id as string
-    const spaceName = row.name as string
-    if (ownerUserId !== userId && !libraryOwnerIds.has(ownerUserId) && !directSpaces.has(`${ownerUserId}:${spaceName}`)) continue
+  const directSpaces = (directResult.data ?? []).filter((row) => !libraryOwnerIds.has(row.owner_user_id as string))
+    .sort((left, right) => {
+      const leftLabel = `${labels.get(left.owner_user_id as string) ?? ''} ${left.space_name}`
+      const rightLabel = `${labels.get(right.owner_user_id as string) ?? ''} ${right.space_name}`
+      return leftLabel.localeCompare(rightLabel)
+  })
+  for (const row of directSpaces) {
+    const ownerUserId = row.owner_user_id as string
+    const spaceName = row.space_name as string
     const ownerLabel = labels.get(ownerUserId) ?? 'Shared library'
     destinations.push({ id: encodeDestination(ownerUserId, spaceName), label: `${ownerLabel} · ${spaceName}`, ownerUserId, spaceName })
   }
@@ -176,7 +177,7 @@ export function createAppleShortcutPublicRouter() {
       const destinations = await shortcutDestinations(client, connection.userId)
       const choices = Object.fromEntries(destinations.map(({ label, id }) => [label, id]))
       await client.from('apple_shortcut_connections').update({ last_used_at: new Date().toISOString() }).eq('id', connection.id)
-      response.json({ choices })
+      response.json({ choices, defaultDestination: destinations.length === 1 ? destinations[0].id : '' })
     } catch (error) {
       response.status(401).json({ error: error instanceof Error ? error.message : 'The Shortcut is not connected.' })
     }

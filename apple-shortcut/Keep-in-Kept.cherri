@@ -67,10 +67,14 @@ const destinationResponse = downloadURL(
 const destinationEnvelope = getDictionary(destinationResponse)
 const choicesValue = getValue(destinationEnvelope, "choices")
 const choices = getDictionary(choicesValue)
-const destinationLabels = getKeys(choices)
-const chosenLabel = chooseFromList(destinationLabels, "Where should this go?")
-const chosenDestination = getValue(choices, chosenLabel)
-@destination = "{chosenDestination}"
+const automaticDestination = getValue(destinationEnvelope, "defaultDestination")
+@destination = "{automaticDestination}"
+if !@destination {
+    const destinationLabels = getKeys(choices)
+    const chosenLabel = chooseFromList(destinationLabels, "Choose a library")
+    const chosenDestination = getValue(choices, chosenLabel)
+    @destination = "{chosenDestination}"
+}
 
 for sharedItem in ShortcutInput {
     const sharedTypeResult = typeOf(@sharedItem)
