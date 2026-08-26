@@ -59,6 +59,8 @@ npm run check          # types, lint, tests, and production build
 npm run check:release  # ignored-file and credential safety audit
 ```
 
+The default test suite includes Apple Shortcut regression coverage for personal and shared-library filing, direct-space permissions, exact pairing links, token and staging-path boundaries, screenshot-file handling, Google rich-link handling, signed-artifact requirements, and migration security contracts. GitHub Actions runs the same suite on every push and pull request.
+
 For a generic Node host:
 
 ```bash

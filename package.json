@@ -20,7 +20,9 @@
     "check:release": "node scripts/check-release.mjs",
     "test:import-links": "node --test scripts/import-apple-links.test.mjs",
     "test:date-search": "node --import tsx --test server/date-search.test.ts",
-    "test": "npm run test:import-links && npm run test:date-search && node --import tsx --test server/search-index.test.ts",
+    "test:shortcut": "node --test scripts/apple-shortcut-contract.test.mjs",
+    "test:server": "node --import tsx --test server/apple-shortcut.test.ts server/date-search.test.ts server/search-index.test.ts",
+    "test": "npm run test:import-links && npm run test:shortcut && npm run test:server",
     "migrate:local": "node scripts/migrate-local.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint ."

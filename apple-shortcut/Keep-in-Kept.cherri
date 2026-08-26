@@ -1,4 +1,4 @@
-#define name Keep in Kept
+#define name Keep-in-Kept
 #define color green
 #define glyph archive
 #define inputs image, media, url, text, webpage, file

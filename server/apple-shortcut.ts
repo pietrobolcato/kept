@@ -5,7 +5,10 @@ import { captureImageItem, captureTextItem, captureVideoItem } from './capture.j
 import { createServiceClient, type AuthContext } from './supabase.js'
 
 type ShortcutConnection = { id: string; userId: string; deviceName: string }
-type ShortcutDestination = { id: string; label: string; ownerUserId: string; spaceName: string }
+export type ShortcutDestination = { id: string; label: string; ownerUserId: string; spaceName: string }
+export type ShortcutDirectSpace = { ownerUserId: string; spaceName: string }
+
+export const appleShortcutName = 'Keep-in-Kept'
 
 const pairLifetimeMs = 10 * 60 * 1000
 const supportedImages = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'])
@@ -24,18 +27,18 @@ function configured() {
   return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
-function cleanDeviceName(value: unknown) {
+export function cleanDeviceName(value: unknown) {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, 120) || 'Apple device' : 'Apple device'
 }
 
-function cleanFilename(value: unknown, fallback: string) {
+export function cleanFilename(value: unknown, fallback: string) {
   if (typeof value !== 'string') return fallback
   const printable = [...value].filter((character) => character.charCodeAt(0) >= 32).join('')
   const cleaned = printable.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 180)
   return cleaned || fallback
 }
 
-function fileExtension(contentType: string, kind: 'image' | 'video') {
+export function fileExtension(contentType: string, kind: 'image' | 'video') {
   if (contentType === 'image/png') return 'png'
   if (contentType === 'image/webp') return 'webp'
   if (contentType === 'image/heic' || contentType === 'image/heif') return 'heic'
@@ -52,8 +55,80 @@ function appOrigin(request: Request) {
   return `${protocol}://${request.get('host')}`
 }
 
-function encodeDestination(ownerUserId: string, spaceName: string) {
+export function encodeDestination(ownerUserId: string, spaceName: string) {
   return Buffer.from(JSON.stringify({ ownerUserId, spaceName }), 'utf8').toString('base64url')
+}
+
+export function composeShortcutDestinations({
+  userId,
+  libraryOwnerIds,
+  directSpaces,
+  ownerLabels,
+}: {
+  userId: string
+  libraryOwnerIds: Iterable<string>
+  directSpaces: ShortcutDirectSpace[]
+  ownerLabels: ReadonlyMap<string, string>
+}): ShortcutDestination[] {
+  const usedLabels = new Set<string>()
+  const uniqueLabel = (baseLabel: string) => {
+    let label = baseLabel
+    let suffix = 2
+    while (usedLabels.has(label)) label = `${baseLabel} (${suffix++})`
+    usedLabels.add(label)
+    return label
+  }
+  const sharedLibraryOwners = [...new Set(libraryOwnerIds)].filter((ownerId) => ownerId && ownerId !== userId)
+    .sort((left, right) => (ownerLabels.get(left) ?? left).localeCompare(ownerLabels.get(right) ?? right))
+  const sharedLibraryOwnerSet = new Set(sharedLibraryOwners)
+  const destinations: ShortcutDestination[] = [{
+    id: encodeDestination(userId, ''), label: uniqueLabel('My library'), ownerUserId: userId, spaceName: '',
+  }]
+  for (const ownerUserId of sharedLibraryOwners) destinations.push({
+    id: encodeDestination(ownerUserId, ''), label: uniqueLabel(ownerLabels.get(ownerUserId) ?? 'Shared library'), ownerUserId, spaceName: '',
+  })
+
+  const uniqueDirectSpaces = new Map<string, ShortcutDirectSpace>()
+  for (const directSpace of directSpaces) {
+    const ownerUserId = directSpace.ownerUserId.trim()
+    const spaceName = directSpace.spaceName.trim()
+    if (!ownerUserId || !spaceName || ownerUserId === userId || sharedLibraryOwnerSet.has(ownerUserId)) continue
+    uniqueDirectSpaces.set(`${ownerUserId}\u0000${spaceName}`, { ownerUserId, spaceName })
+  }
+  const orderedDirectSpaces = [...uniqueDirectSpaces.values()].sort((left, right) => {
+    const leftLabel = `${ownerLabels.get(left.ownerUserId) ?? 'Shared library'} · ${left.spaceName}`
+    const rightLabel = `${ownerLabels.get(right.ownerUserId) ?? 'Shared library'} · ${right.spaceName}`
+    return leftLabel.localeCompare(rightLabel)
+  })
+  for (const { ownerUserId, spaceName } of orderedDirectSpaces) {
+    const ownerLabel = ownerLabels.get(ownerUserId) ?? 'Shared library'
+    destinations.push({ id: encodeDestination(ownerUserId, spaceName), label: uniqueLabel(`${ownerLabel} · ${spaceName}`), ownerUserId, spaceName })
+  }
+  return destinations
+}
+
+export function shortcutDestinationEnvelope(destinations: ShortcutDestination[]) {
+  return {
+    choices: Object.fromEntries(destinations.map(({ label, id }) => [label, id])),
+    defaultDestination: destinations.length === 1 ? destinations[0].id : '',
+  }
+}
+
+export function buildShortcutRunUrl(origin: string, code: string) {
+  const payload = JSON.stringify({ keptPair: code, baseUrl: origin.replace(/\/$/, '') })
+  return `shortcuts://run-shortcut?name=${encodeURIComponent(appleShortcutName)}&input=text&text=${encodeURIComponent(payload)}`
+}
+
+export function parseShortcutAuthorization(value: string) {
+  return value.match(/^(?:Bearer|Shortcut)\s+([A-Za-z0-9_-]{32,180})$/i)?.[1]
+}
+
+export function shortcutStagingPrefix(ownerUserId: string, connectionId: string) {
+  return `${ownerUserId}/shortcut-staging/${connectionId}/`
+}
+
+export function isShortcutStagingPath(storagePath: string, ownerUserId: string, connectionId: string) {
+  return storagePath.startsWith(shortcutStagingPrefix(ownerUserId, connectionId)) && !storagePath.includes('..')
 }
 
 function ownerDisplayName(user: { email?: string | null; user_metadata?: Record<string, unknown> } | null) {
@@ -79,30 +154,19 @@ async function shortcutDestinations(client: SupabaseClient, userId: string): Pro
     labels.set(id, `${ownerDisplayName(data.user)}’s library`)
   }))
 
-  const destinations: ShortcutDestination[] = [{
-    id: encodeDestination(userId, ''), label: 'My library', ownerUserId: userId, spaceName: '',
-  }]
-  for (const ownerUserId of libraryOwnerIds) destinations.push({
-    id: encodeDestination(ownerUserId, ''), label: labels.get(ownerUserId) ?? 'Shared library', ownerUserId, spaceName: '',
+  return composeShortcutDestinations({
+    userId,
+    libraryOwnerIds,
+    directSpaces: (directResult.data ?? []).map((row) => ({
+      ownerUserId: row.owner_user_id as string,
+      spaceName: row.space_name as string,
+    })),
+    ownerLabels: labels,
   })
-  const directSpaces = (directResult.data ?? []).filter((row) => !libraryOwnerIds.has(row.owner_user_id as string))
-    .sort((left, right) => {
-      const leftLabel = `${labels.get(left.owner_user_id as string) ?? ''} ${left.space_name}`
-      const rightLabel = `${labels.get(right.owner_user_id as string) ?? ''} ${right.space_name}`
-      return leftLabel.localeCompare(rightLabel)
-  })
-  for (const row of directSpaces) {
-    const ownerUserId = row.owner_user_id as string
-    const spaceName = row.space_name as string
-    const ownerLabel = labels.get(ownerUserId) ?? 'Shared library'
-    destinations.push({ id: encodeDestination(ownerUserId, spaceName), label: `${ownerLabel} · ${spaceName}`, ownerUserId, spaceName })
-  }
-  return destinations
 }
 
 function shortcutToken(request: Request) {
-  const authorization = request.header('authorization') ?? ''
-  return authorization.match(/^(?:Bearer|Shortcut)\s+([A-Za-z0-9_-]{32,180})$/i)?.[1]
+  return parseShortcutAuthorization(request.header('authorization') ?? '')
 }
 
 async function authenticateShortcut(request: Request): Promise<{ client: SupabaseClient; connection: ShortcutConnection }> {
@@ -175,9 +239,8 @@ export function createAppleShortcutPublicRouter() {
     try {
       const { client, connection } = await authenticateShortcut(request)
       const destinations = await shortcutDestinations(client, connection.userId)
-      const choices = Object.fromEntries(destinations.map(({ label, id }) => [label, id]))
       await client.from('apple_shortcut_connections').update({ last_used_at: new Date().toISOString() }).eq('id', connection.id)
-      response.json({ choices, defaultDestination: destinations.length === 1 ? destinations[0].id : '' })
+      response.json(shortcutDestinationEnvelope(destinations))
     } catch (error) {
       response.status(401).json({ error: error instanceof Error ? error.message : 'The Shortcut is not connected.' })
     }
@@ -212,7 +275,7 @@ export function createAppleShortcutPublicRouter() {
       if (kind === 'video' && !supportedVideos.has(contentType)) return response.status(415).json({ error: 'Kept currently supports MP4, MOV and WebM video.' })
       if (!/^[0-9a-f]{64}$/.test(fingerprint)) return response.status(400).json({ error: 'That shared file fingerprint is invalid.' })
       const filename = cleanFilename(request.body?.filename, kind === 'video' ? 'shared-video.mp4' : 'shared-image.jpg')
-      const storagePath = `${destination.ownerUserId}/shortcut-staging/${connection.id}/${crypto.randomUUID()}.${fileExtension(contentType, kind)}`
+      const storagePath = `${shortcutStagingPrefix(destination.ownerUserId, connection.id)}${crypto.randomUUID()}.${fileExtension(contentType, kind)}`
       const { data, error } = await client.storage.from(imageBucket).createSignedUploadUrl(storagePath, { upsert: false })
       if (error || !data?.signedUrl) throw new Error(`Shortcut upload could not be prepared: ${error?.message ?? 'No signed URL was returned.'}`)
       response.status(201).json({ uploadUrl: data.signedUrl, storagePath, kind, contentType, filename, contentFingerprint: fingerprint })
@@ -231,8 +294,7 @@ export function createAppleShortcutPublicRouter() {
       const fingerprint = typeof request.body?.contentFingerprint === 'string' ? request.body.contentFingerprint.toLowerCase() : ''
       const filename = cleanFilename(request.body?.filename, kind === 'video' ? 'shared-video.mp4' : 'shared-image.jpg')
       stagedPath = typeof request.body?.storagePath === 'string' ? request.body.storagePath : ''
-      const requiredPrefix = `${destination.ownerUserId}/shortcut-staging/${connection.id}/`
-      if (!stagedPath.startsWith(requiredPrefix) || stagedPath.includes('..')) return response.status(403).json({ error: 'That staged upload does not belong to this Shortcut connection.' })
+      if (!isShortcutStagingPath(stagedPath, destination.ownerUserId, connection.id)) return response.status(403).json({ error: 'That staged upload does not belong to this Shortcut connection.' })
       if (!/^[0-9a-f]{64}$/.test(fingerprint)) return response.status(400).json({ error: 'That shared file fingerprint is invalid.' })
       if (kind === 'image' && !supportedImages.has(contentType)) return response.status(415).json({ error: 'That staged image type is not supported.' })
       if (kind === 'video' && !supportedVideos.has(contentType)) return response.status(415).json({ error: 'That staged video type is not supported.' })
@@ -288,10 +350,7 @@ export function createAppleShortcutPrivateRouter() {
     const { error } = await client.from('apple_shortcut_pairing_codes').insert({ user_id: user.id, code_hash: digest(code), expires_at: expiresAt })
     if (error) return response.status(503).json({ error: `Shortcut pairing could not be created: ${error.message}` })
     const origin = appOrigin(request)
-    const payload = JSON.stringify({ keptPair: code, baseUrl: origin })
-    // iOS installs the signed artifact using its exported filename. Keep this
-    // exact so the deep link resolves the Shortcut already visible on-device.
-    const runUrl = `shortcuts://run-shortcut?name=${encodeURIComponent('Keep-in-Kept')}&input=text&text=${encodeURIComponent(payload)}`
+    const runUrl = buildShortcutRunUrl(origin, code)
     response.status(201).json({ runUrl, expiresAt, installUrl: `${origin}/downloads/Keep-in-Kept.shortcut` })
   })
 
