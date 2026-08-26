@@ -81,9 +81,24 @@ for sharedItem in ShortcutInput {
     @sharedType = "{sharedTypeResult}"
     @filename = getName(@sharedItem)
     @receipt = ""
+    @imageCandidate = @sharedItem
+    @isImage = false
 
     if @sharedType contains "Image" {
-        const jpeg = convertToJPEG(@sharedItem, 0.88, true)
+        @isImage = true
+    } else {
+        if @sharedType contains "File" {
+            const fileImages = getImages(@sharedItem)
+            if fileImages {
+                const firstFileImage = getFirstItem(fileImages)
+                @imageCandidate = firstFileImage
+                @isImage = true
+            }
+        }
+    }
+
+    if @isImage {
+        const jpeg = convertToJPEG(@imageCandidate, 0.88, true)
         const jpegHash = hash(jpeg, "SHA256")
         const imageTicketResult = jsonRequest(
             "{@baseUrl}/api/apple-shortcut/upload-ticket",
@@ -126,9 +141,10 @@ for sharedItem in ShortcutInput {
             const savedVideo = getDictionary(videoResult)
             @receipt = "{savedVideo['receipt']}"
         } else {
-            const extractedUrls = getURLs("{@sharedItem}")
-            if extractedUrls {
-                const firstUrl = getFirstItem(extractedUrls)
+            @sharedText = getText(@sharedItem)
+            const urlMatches = matchText('https?://[^\s<>]+', @sharedText, false)
+            if urlMatches {
+                const firstUrl = getFirstItem(urlMatches)
                 const linkResult = jsonRequest(
                     "{@baseUrl}/api/apple-shortcut/capture",
                     "POST",
@@ -138,11 +154,10 @@ for sharedItem in ShortcutInput {
                 const savedLink = getDictionary(linkResult)
                 @receipt = "{savedLink['receipt']}"
             } else {
-                @noteText = getText(@sharedItem)
                 const noteResult = jsonRequest(
                     "{@baseUrl}/api/apple-shortcut/capture",
                     "POST",
-                    {"type": "note", "value": "{@noteText}", "destination": "{@destination}"},
+                    {"type": "note", "value": "{@sharedText}", "destination": "{@destination}"},
                     {"Authorization": "Bearer {@token}"}
                 )
                 const savedNote = getDictionary(noteResult)
